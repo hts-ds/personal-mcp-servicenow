@@ -1,3 +1,10 @@
+# Archived upstream architecture diagrams
+
+> **Not current for this H104 Basic Auth fork.** These diagrams document the
+> upstream v3 OAuth architecture and are retained only for historical context.
+> The active fork uses `auth/ServiceNowBasicAuthClient` and stdio-only MCP;
+> see [../docs/H104_BASIC_AUTH_MIGRATION.md](../docs/H104_BASIC_AUTH_MIGRATION.md).
+
 # MCP ServiceNow Server - Architecture Documentation
 
 This folder contains Mermaid diagrams documenting the architecture of the Personal MCP ServiceNow server (v3.0).

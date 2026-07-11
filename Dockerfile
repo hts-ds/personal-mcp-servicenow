@@ -40,21 +40,13 @@ COPY . .
 RUN useradd -m -u 1000 servicenow && chown -R servicenow:servicenow /app
 USER servicenow
 
-# Transport config - SSE makes the server network-accessible for cloud agents
-ENV MCP_TRANSPORT=sse
-ENV MCP_HOST=0.0.0.0
-ENV MCP_PORT=8000
+# This fork is local stdio-only. A container may be used with `docker run -i`
+# by a trusted local launcher, but it does not expose an HTTP/SSE endpoint.
+ENV MCP_TRANSPORT=stdio
 
 # Flush stdout/stderr immediately so audit log lines reach Azure Monitor
 # without buffering across container restarts.
 ENV PYTHONUNBUFFERED=1
-
-# Health check against the SSE endpoint
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:8000/sse || exit 1
-
-# Expose port
-EXPOSE 8000
 
 # Run the MCP server
 CMD ["python", "personal_mcp_servicenow_main.py"]

@@ -1,21 +1,27 @@
 """Shared pytest fixtures.
 
-The v4.2 connection-pooling refactor introduced a process-wide pooled
-``httpx.AsyncClient`` cached in ``oauth.http_pool._pooled_client``. Tests
-patch ``oauth.singleton.httpx.AsyncClient`` per test; without resetting the
-cache between tests, one test's mock client would leak into the next (or a
-real client built during an unmocked test would persist). This autouse
-fixture resets the pool before every test so each starts from a clean slate.
+The Basic Auth client uses a process-wide pooled ``httpx.AsyncClient``. This
+fixture drops the pool before and after each test so a mock or a real client
+cannot leak into another test.
 """
 from __future__ import annotations
 
+import os
+
 import pytest
+
+
+# Never allow an ignored developer-local .env pointer to inject real ServiceNow
+# credentials into a unit-test process during module collection. Individual
+# tests explicitly set a temporary SERVICENOW_ENV_FILE when that behaviour is
+# under test.
+os.environ["SERVICENOW_ENV_FILE"] = ""
 
 
 @pytest.fixture(autouse=True)
 def _reset_http_pool():
     """Drop the cached pooled client before and after each test."""
-    import oauth.http_pool as http_pool
+    import auth.http_pool as http_pool
 
     http_pool._pooled_client = None
     yield

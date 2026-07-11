@@ -158,7 +158,7 @@ def main():
         print("  coverage         - Show coverage results")
         print("\nExamples:")
         print("  python tests/run_tests.py all")
-        print("  python tests/run_tests.py specific test_oauth")
+        print("  python tests/run_tests.py specific test_basic_auth_client")
         print("  python tests/run_tests.py coverage")
         sys.exit(1)
     

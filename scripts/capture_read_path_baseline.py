@@ -70,18 +70,18 @@ async def measure(
     """Run `call`, capture outgoing URL and response payload."""
     captured_urls: list[str] = []
 
-    # Lazy import — the dispatcher resolves make_oauth_request from its own
-    # module namespace, so patch it there (not on the deleted shim).
+    # Lazy import — patch the authenticated read helper where the dispatcher
+    # resolves it so the live URL and response shape are both captured.
     import http_layer.request_dispatcher as svc
 
-    original = svc.make_oauth_request
+    original = svc.make_authenticated_get
 
-    async def recording_oauth_request(url: str) -> Any:
+    async def recording_authenticated_get(url: str) -> Any:
         captured_urls.append(url)
         return await original(url)
 
     try:
-        with patch.object(svc, "make_oauth_request", new=recording_oauth_request):
+        with patch.object(svc, "make_authenticated_get", new=recording_authenticated_get):
             response = await call()
     except Exception as exc:  # noqa: BLE001
         return {

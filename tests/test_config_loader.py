@@ -31,10 +31,9 @@ class TestLoadConfig:
         from config_loader import load_config
 
         with patch.dict(os.environ, {
-            'SERVICENOW_INSTANCE': 'env-instance.service-now.com',
-            'SERVICENOW_AUTH_TYPE': 'basic',
-            'SERVICENOW_USERNAME': 'env-user',
-            'SERVICENOW_PASSWORD': 'env-pass'
+            'SERVICE_NOW_HOST': 'env-instance.service-now.com',
+            'SERVICE_NOW_USERNAME': 'env-user',
+            'SERVICE_NOW_PASSWORD': 'env-pass'
         }):
             config = load_config()
             assert config['instance'] == 'env-instance.service-now.com'
@@ -51,30 +50,28 @@ class TestLoadConfig:
                 with open(config_file, 'w') as f:
                     json.dump({
                         'instance': 'file-instance.service-now.com',
-                        'auth_type': 'oauth',
-                        'client_id': 'file-client-id',
-                        'client_secret': 'file-secret'
+                        'auth_type': 'basic',
+                        'username': 'file-user',
+                        'password': 'file-pass'
                     }, f)
 
-                with patch.dict(os.environ, {}, clear=True):
-                    # Clear any SERVICENOW_ env vars
-                    env_copy = {k: v for k, v in os.environ.items()
-                               if not k.startswith('SERVICENOW_')}
-                    with patch.dict(os.environ, env_copy, clear=True):
-                        config = load_config()
-                        assert config['instance'] == 'file-instance.service-now.com'
+                # A file-config precedence test must not consult the ignored
+                # developer-local credentials referenced by SERVICENOW_ENV_FILE.
+                with patch('config_loader.load_servicenow_environment'), \
+                     patch.dict(os.environ, {}, clear=True):
+                    config = load_config()
+                    assert config['instance'] == 'file-instance.service-now.com'
 
 
 class TestValidateConfig:
     """Tests for validate_config function."""
 
-    def test_valid_oauth_config(self):
+    def test_valid_basic_config_without_auth_type(self):
         from config_loader import validate_config
         config = {
             'instance': 'test.service-now.com',
-            'auth_type': 'oauth',
-            'client_id': 'abc123',
-            'client_secret': 'secret'
+            'username': 'user',
+            'password': 'pass'
         }
         # Should not raise
         validate_config(config)
@@ -100,12 +97,65 @@ class TestValidateConfig:
         with pytest.raises(ConfigError, match='instance'):
             validate_config(config)
 
-    def test_oauth_missing_client_id_raises(self):
+    def test_oauth_auth_type_is_rejected(self):
         from config_loader import validate_config, ConfigError
         config = {
             'instance': 'test.service-now.com',
             'auth_type': 'oauth',
-            'client_secret': 'secret'
+            'username': 'user',
+            'password': 'pass'
         }
-        with pytest.raises(ConfigError, match='client_id'):
+        with pytest.raises(ConfigError, match='Basic Auth'):
             validate_config(config)
+
+    def test_missing_username_raises(self):
+        from config_loader import validate_config, ConfigError
+
+        with pytest.raises(ConfigError, match='username'):
+            validate_config({
+                'instance': 'test.service-now.com',
+                'password': 'pass',
+            })
+
+    def test_missing_password_raises(self):
+        from config_loader import validate_config, ConfigError
+
+        with pytest.raises(ConfigError, match='password'):
+            validate_config({
+                'instance': 'test.service-now.com',
+                'username': 'user',
+            })
+
+
+def test_load_config_from_external_env_file(tmp_path, monkeypatch):
+    """Existing H104 credentials can be referenced without copying secrets."""
+    external_env = tmp_path / "servicenow.env"
+    external_env.write_text(
+        "SERVICE_NOW_HOST=https://h104.example.service-now.com\n"
+        "SERVICE_NOW_USERNAME=h104-user\n"
+        "SERVICE_NOW_PASSWORD=h104-password\n",
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("SERVICENOW_INSTANCE", raising=False)
+    monkeypatch.delenv("SERVICENOW_USERNAME", raising=False)
+    monkeypatch.delenv("SERVICENOW_PASSWORD", raising=False)
+    monkeypatch.setenv("SERVICENOW_ENV_FILE", str(external_env))
+
+    from config_loader import load_config_from_env
+
+    config = load_config_from_env()
+
+    assert config["instance"] == "https://h104.example.service-now.com"
+    assert config["username"] == "h104-user"
+    assert config["password"] == "h104-password"
+
+
+def test_setup_instructions_only_describe_basic_auth():
+    from config_loader import get_setup_instructions
+
+    instructions = get_setup_instructions()
+
+    assert "SERVICENOW_USERNAME" in instructions
+    assert "SERVICENOW_PASSWORD" in instructions
+    assert "CLIENT_SECRET" not in instructions
+    assert "OAuth" not in instructions

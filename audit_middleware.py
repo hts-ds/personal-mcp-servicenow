@@ -15,7 +15,10 @@ from fastmcp.server.middleware import Middleware, MiddlewareContext
 
 _log = structlog.get_logger("audit")
 
-_SENSITIVE = {"password", "secret", "token", "key", "auth", "credential"}
+_SENSITIVE = {
+    "password", "secret", "token", "key", "auth", "credential",
+    "sys_id", "ci_identifier",
+}
 
 
 def _sanitize(args: dict | None) -> dict:

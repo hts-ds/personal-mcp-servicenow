@@ -21,81 +21,49 @@ class TestServerAndAuthTools(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         """Set up test fixtures."""
         try:
-            from utility_tools import nowtest, nowtestoauth, nowauthinfo, nowtestauth, nowtest_auth_input
+            from utility_tools import nowtest, now_test_connection, now_auth_info
             self.auth_tools_available = True
             self.nowtest = nowtest
-            self.nowtestoauth = nowtestoauth
-            self.nowauthinfo = nowauthinfo
-            self.nowtestauth = nowtestauth
-            self.nowtest_auth_input = nowtest_auth_input
+            self.now_test_connection = now_test_connection
+            self.now_auth_info = now_auth_info
         except ImportError as e:
             self.auth_tools_available = False
             self.import_error = str(e)
 
-    async def test_nowtest_connectivity(self):
+    def test_nowtest_connectivity(self):
         """Test basic server connectivity."""
         if not self.auth_tools_available:
             self.skipTest(f"Auth tools not available: {self.import_error}")
         
-        with patch.object(self, 'nowtest', new_callable=AsyncMock) as mock_func:
-            mock_func.return_value = {"status": "connected", "message": "Server is reachable"}
-            
-            result = await self.nowtest()
-            
-            self.assertIsInstance(result, dict)
-            self.assertIn('status', result)
+        result = self.nowtest()
+        self.assertIsInstance(result, str)
+        self.assertIn('Server is running', result)
 
-    async def test_nowtestoauth_success(self):
-        """Test OAuth authentication test."""
+    async def test_now_test_connection_success(self):
+        """Test Basic Auth connection tool."""
         if not self.auth_tools_available:
             self.skipTest(f"Auth tools not available: {self.import_error}")
         
-        with patch.object(self, 'nowtestoauth', new_callable=AsyncMock) as mock_func:
-            mock_func.return_value = {"oauth_enabled": True, "token_valid": True}
+        with patch.object(self, 'now_test_connection', new_callable=AsyncMock) as mock_func:
+            mock_func.return_value = {"auth_method": "basic", "status": "success"}
             
-            result = await self.nowtestoauth()
+            result = await self.now_test_connection()
             
             self.assertIsInstance(result, dict)
-            self.assertIn('oauth_enabled', result)
+            self.assertEqual(result['auth_method'], 'basic')
 
-    async def test_nowauthinfo_oauth(self):
+    def test_now_auth_info_basic(self):
         """Test authentication info retrieval."""
         if not self.auth_tools_available:
             self.skipTest(f"Auth tools not available: {self.import_error}")
         
-        with patch.object(self, 'nowauthinfo', new_callable=AsyncMock) as mock_func:
-            mock_func.return_value = {"auth_method": "OAuth 2.0", "oauth_enabled": True}
+        with patch.object(self, 'now_auth_info') as mock_func:
+            mock_func.return_value = {"auth_method": "basic", "basic_auth_enabled": True}
             
-            result = await self.nowauthinfo()
-            
-            self.assertIsInstance(result, dict)
-            self.assertEqual(result['auth_method'], 'OAuth 2.0')
-
-    async def test_nowtestauth_api_test(self):
-        """Test ServiceNow API authentication test."""
-        if not self.auth_tools_available:
-            self.skipTest(f"Auth tools not available: {self.import_error}")
-        
-        with patch.object(self, 'nowtestauth', new_callable=AsyncMock) as mock_func:
-            mock_func.return_value = {"api_accessible": True, "auth_valid": True}
-            
-            result = await self.nowtestauth()
+            result = self.now_auth_info()
             
             self.assertIsInstance(result, dict)
-            self.assertIn('api_accessible', result)
-
-    async def test_nowtest_auth_input_table_description(self):
-        """Test table description retrieval."""
-        if not self.auth_tools_available:
-            self.skipTest(f"Auth tools not available: {self.import_error}")
-        
-        with patch.object(self, 'nowtest_auth_input', new_callable=AsyncMock) as mock_func:
-            mock_func.return_value = {"table": "incident", "description": "Incident Management"}
-            
-            result = await self.nowtest_auth_input("incident")
-            
-            self.assertIsInstance(result, dict)
-            self.assertEqual(result['table'], 'incident')
+            self.assertEqual(result['auth_method'], 'basic')
 
 
 class TestKnowledgeBaseTools(unittest.IsolatedAsyncioTestCase):

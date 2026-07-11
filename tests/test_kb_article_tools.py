@@ -801,48 +801,26 @@ class TestWritePathTimeoutPropagation:
 
     @pytest.mark.asyncio
     async def test_executor_re_raises_timeout_when_raise_for_status_true(self):
-        from oauth.request_executor import RequestExecutor
-        from oauth.token_store import TokenStore
+        from auth.client import ServiceNowBasicAuthClient
 
-        async def headers():
-            return {"Authorization": "Bearer test"}
-
-        token_store = MagicMock(spec=TokenStore)
-        token_store.clear = AsyncMock()
-        executor = RequestExecutor(get_auth_headers=headers, token_store=token_store)
-
-        with patch("oauth.request_executor.httpx.AsyncClient") as mock_client_class:
-            mock_client = MagicMock()
-            mock_client.request = AsyncMock(side_effect=httpx.TimeoutException("Timed out"))
-            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client.__aexit__ = AsyncMock(return_value=None)
-            mock_client_class.return_value = mock_client
-
+        mock_client = MagicMock()
+        mock_client.request = AsyncMock(side_effect=httpx.TimeoutException("Timed out"))
+        client = ServiceNowBasicAuthClient("https://x", "test-user", "test-password")
+        with patch("auth.client.get_pooled_client", return_value=mock_client):
             with pytest.raises(httpx.TimeoutException):
-                await executor.make_authenticated_request(
+                await client.make_authenticated_request(
                     "POST", "https://x/api", raise_for_status=True
                 )
 
     @pytest.mark.asyncio
     async def test_executor_swallows_timeout_when_raise_for_status_false(self):
         """Read-path behaviour preserved."""
-        from oauth.request_executor import RequestExecutor
-        from oauth.token_store import TokenStore
+        from auth.client import ServiceNowBasicAuthClient
 
-        async def headers():
-            return {"Authorization": "Bearer test"}
-
-        token_store = MagicMock(spec=TokenStore)
-        token_store.clear = AsyncMock()
-        executor = RequestExecutor(get_auth_headers=headers, token_store=token_store)
-
-        with patch("oauth.request_executor.httpx.AsyncClient") as mock_client_class:
-            mock_client = MagicMock()
-            mock_client.request = AsyncMock(side_effect=httpx.TimeoutException("Timed out"))
-            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client.__aexit__ = AsyncMock(return_value=None)
-            mock_client_class.return_value = mock_client
-
-            result = await executor.make_authenticated_request("GET", "https://x/api")
+        mock_client = MagicMock()
+        mock_client.request = AsyncMock(side_effect=httpx.TimeoutException("Timed out"))
+        client = ServiceNowBasicAuthClient("https://x", "test-user", "test-password")
+        with patch("auth.client.get_pooled_client", return_value=mock_client):
+            result = await client.make_authenticated_request("GET", "https://x/api")
             assert result is None
 

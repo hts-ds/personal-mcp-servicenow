@@ -1,4 +1,9 @@
-# Architecture Refactor Plan
+# Archived upstream architecture refactor plan
+
+> **Not current for this H104 Basic Auth fork.** The OAuth split described in
+> this historical plan was removed from the active runtime. See
+> [docs/H104_BASIC_AUTH_MIGRATION.md](docs/H104_BASIC_AUTH_MIGRATION.md) for
+> the current architecture.
 
 Status: planning · Source: graphify analysis (2026-05-20) · Target release: v3.1
 

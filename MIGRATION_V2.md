@@ -1,4 +1,8 @@
-# Migration Guide: v1.x to v2.0
+# Archived upstream migration guide: v1.x to v2.0
+
+> **Not current for this H104 Basic Auth fork.** This file is retained only as
+> upstream history. Do not follow its OAuth configuration, deleted-file, or
+> `OAUTH_SETUP_GUIDE.md` instructions. Use [BASIC_AUTH_SETUP_GUIDE.md](BASIC_AUTH_SETUP_GUIDE.md) and [docs/H104_BASIC_AUTH_MIGRATION.md](docs/H104_BASIC_AUTH_MIGRATION.md) instead.
 
 This guide helps you migrate from Personal MCP ServiceNow v1.x to v2.0. Version 2.0 includes significant architectural changes and new features that require some adjustments to existing code.
 
@@ -37,7 +41,8 @@ SERVICENOW_CLIENT_ID=your_oauth_client_id
 SERVICENOW_CLIENT_SECRET=your_oauth_client_secret
 ```
 
-**Action Required**: Follow the OAuth setup guide in `OAUTH_SETUP_GUIDE.md`
+> Historical upstream instruction — do not follow. This fork uses
+> [BASIC_AUTH_SETUP_GUIDE.md](BASIC_AUTH_SETUP_GUIDE.md) instead.
 
 ### 2. Update Import Statements
 
@@ -219,7 +224,8 @@ python Testing/test_query_intelligence.py
 
 ## 📚 Additional Resources
 
-- **OAuth Setup**: See `OAUTH_SETUP_GUIDE.md` for complete OAuth configuration
+- **Historical OAuth setup**: not available in this fork; use
+  [BASIC_AUTH_SETUP_GUIDE.md](BASIC_AUTH_SETUP_GUIDE.md).
 - **AI Features**: Check `Diagrams & Documentation/05-ai-intelligence-flow.md`
 - **API Reference**: Updated in `README.md` with all v2.0 functions
 - **Examples**: See `Testing/TEST_PROMPTS.md` for extensive examples

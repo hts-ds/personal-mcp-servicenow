@@ -17,10 +17,10 @@ class TestUtilityTools(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         """Set up test fixtures for async tests."""
         try:
-            from utility_tools import nowtest, now_test_oauth, now_auth_info
+            from utility_tools import nowtest, now_test_connection, now_auth_info
             self.utility_available = True
             self.nowtest = nowtest
-            self.now_test_oauth = now_test_oauth
+            self.now_test_connection = now_test_connection
             self.now_auth_info = now_auth_info
         except ImportError as e:
             self.utility_available = False
@@ -36,17 +36,17 @@ class TestUtilityTools(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(result, str)
         self.assertIn("Server is running", result)
 
-    @patch('utility_tools.test_oauth_connection', new_callable=AsyncMock)
-    async def test_now_test_oauth_success(self, mock_test_oauth):
-        """Test OAuth connection test with successful result."""
+    @patch('utility_tools.test_servicenow_connection', new_callable=AsyncMock)
+    async def test_now_test_connection_success(self, mock_test_connection):
+        """Test Basic Auth connection test with successful result."""
         if not self.utility_available:
             self.skipTest(f"Utility tools not available: {self.import_error}")
         
-        mock_test_oauth.return_value = {'status': 'success'}
+        mock_test_connection.return_value = {'status': 'success', 'auth_method': 'basic'}
         
-        result = await self.now_test_oauth()
+        result = await self.now_test_connection()
         
-        mock_test_oauth.assert_called_once()
+        mock_test_connection.assert_called_once()
         self.assertIsInstance(result, dict)
 
     @patch('utility_tools.get_auth_info', new_callable=AsyncMock)
@@ -56,7 +56,7 @@ class TestUtilityTools(unittest.IsolatedAsyncioTestCase):
             self.skipTest(f"Utility tools not available: {self.import_error}")
         
         mock_get_auth_info.return_value = {
-            'auth_method': 'OAuth 2.0',
+            'auth_method': 'basic',
             'client_configured': True
         }
         

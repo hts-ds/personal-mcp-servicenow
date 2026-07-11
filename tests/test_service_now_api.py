@@ -2,7 +2,7 @@
 """
 unittest version of ServiceNow API tests.
 
-Tests the service_now_api_oauth.py module functionality with proper mocking
+Tests the ServiceNow HTTP dispatcher functionality with proper mocking
 to avoid live API calls and achieve comprehensive coverage.
 """
 
@@ -253,13 +253,13 @@ class TestServiceNowAPI(unittest.IsolatedAsyncioTestCase):
 
     # --- make_nws_request tests ---
 
-    @patch('http_layer.request_dispatcher.make_oauth_request')
-    async def test_make_nws_request_success(self, mock_oauth_request):
+    @patch('http_layer.request_dispatcher.make_authenticated_get')
+    async def test_make_nws_request_success(self, mock_authenticated_get):
         """Test successful API request includes all default params."""
         if not self.api_available:
             self.skipTest(f"ServiceNow API not available: {self.import_error}")
 
-        mock_oauth_request.return_value = {
+        mock_authenticated_get.return_value = {
             'result': [
                 {'number': {'value': 'INC001', 'display_value': 'INC001'}}
             ]
@@ -269,8 +269,8 @@ class TestServiceNowAPI(unittest.IsolatedAsyncioTestCase):
         result = await self.make_nws_request(url)
 
         # Verify the request was made with all default params
-        mock_oauth_request.assert_called_once()
-        called_url = mock_oauth_request.call_args[0][0]
+        mock_authenticated_get.assert_called_once()
+        called_url = mock_authenticated_get.call_args[0][0]
         self.assertIn("sysparm_display_value=true", called_url)
         self.assertIn("sysparm_exclude_reference_link=true", called_url)
         self.assertIn("sysparm_no_count=true", called_url)
@@ -283,37 +283,37 @@ class TestServiceNowAPI(unittest.IsolatedAsyncioTestCase):
         }
         self.assertEqual(result, expected)
 
-    @patch('http_layer.request_dispatcher.make_oauth_request')
-    async def test_make_nws_request_encodes_query(self, mock_oauth_request):
+    @patch('http_layer.request_dispatcher.make_authenticated_get')
+    async def test_make_nws_request_encodes_query(self, mock_authenticated_get):
         """Test that make_nws_request encodes sysparm_query before sending."""
         if not self.api_available:
             self.skipTest(f"ServiceNow API not available: {self.import_error}")
 
-        mock_oauth_request.return_value = {'result': []}
+        mock_authenticated_get.return_value = {'result': []}
 
         url = "https://test.service-now.com/api/now/table/incident?sysparm_query=short_descriptionLIKEserver down"
         await self.make_nws_request(url)
 
-        called_url = mock_oauth_request.call_args[0][0]
+        called_url = mock_authenticated_get.call_args[0][0]
         self.assertIn("server%20down", called_url)
         self.assertNotIn("server down", called_url)
 
-    @patch('http_layer.request_dispatcher.make_oauth_request')
-    async def test_make_nws_request_http_error(self, mock_oauth_request):
+    @patch('http_layer.request_dispatcher.make_authenticated_get')
+    async def test_make_nws_request_http_error(self, mock_authenticated_get):
         """Test API request with error returns None."""
         if not self.api_available:
             self.skipTest(f"ServiceNow API not available: {self.import_error}")
 
-        mock_oauth_request.side_effect = Exception("404 Not Found")
+        mock_authenticated_get.side_effect = Exception("404 Not Found")
 
         url = "https://test.service-now.com/api/now/table/nonexistent"
         result = await self.make_nws_request(url)
 
         self.assertIsNone(result)
 
-    @patch('http_layer.request_dispatcher.get_oauth_client')
-    async def test_make_nws_request_write_delegates_to_oauth_client(self, mock_get_client):
-        """POST/PATCH route through oauth_client with raise_for_status=True."""
+    @patch('http_layer.request_dispatcher.get_servicenow_client')
+    async def test_make_nws_request_write_delegates_to_basic_auth_client(self, mock_get_client):
+        """POST/PATCH route through the Basic Auth client with raise_for_status=True."""
         if not self.api_available:
             self.skipTest(f"ServiceNow API not available: {self.import_error}")
 
@@ -333,7 +333,7 @@ class TestServiceNowAPI(unittest.IsolatedAsyncioTestCase):
             "POST", url, raise_for_status=True, json=payload
         )
 
-    @patch('http_layer.request_dispatcher.get_oauth_client')
+    @patch('http_layer.request_dispatcher.get_servicenow_client')
     async def test_make_nws_request_patch_propagates_status_error(self, mock_get_client):
         """PATCH bubbling HTTPStatusError reaches the caller intact."""
         if not self.api_available:

@@ -6,6 +6,7 @@ Provides CI discovery, search, and analysis functionality.
 """
 
 import asyncio
+import re
 from urllib.parse import quote
 from http_layer import make_nws_request, NWS_API_BASE
 from utils import extract_keywords
@@ -132,13 +133,13 @@ CI_TABLES = [
 
 # Essential fields for CI discovery
 ESSENTIAL_CI_FIELDS = [
-    "number", "name", "sys_class_name", "operational_status", 
+    "number", "sys_id", "name", "sys_class_name", "operational_status",
     "install_status", "sys_created_on", "sys_updated_on"
 ]
 
 # Detailed fields for comprehensive CI information
 DETAILED_CI_FIELDS = [
-    "number", "name", "sys_class_name", "operational_status", "install_status",
+    "number", "sys_id", "name", "sys_class_name", "operational_status", "install_status",
     "ip_address", "serial_number", "model_category", "location", "assigned_to", 
     "assignment_group", "sys_created_on", "sys_updated_on", "short_description",
     "manufacturer", "model_number", "cost_center", "environment"
@@ -205,7 +206,9 @@ async def search_cis_by_attributes(
     if not any([name, ip_address, location, status]):
         return "At least one search attribute must be provided"
     
-    table = ci_type if ci_type and ci_type in CI_TABLES else "cmdb_ci"
+    if ci_type and not _is_valid_ci_table(ci_type):
+        return "Invalid CI table name"
+    table = ci_type or "cmdb_ci"
     fields = DETAILED_CI_FIELDS if detailed else ESSENTIAL_CI_FIELDS
     
     # Build query conditions. User values are percent-encoded (safe='') so
@@ -245,11 +248,43 @@ async def search_cis_by_attributes(
     except Exception:
         return ERROR_SEARCHING_CIS
 
-async def _probe_ci_table(table: str, ci_number: str) -> Optional[Dict[str, Any]]:
-    """Fetch a CI by number from one table; return the first row or None."""
-    url = f"{NWS_API_BASE}/api/now/table/{table}?sysparm_fields={','.join(DETAILED_CI_FIELDS)}&sysparm_query=number={ci_number}&sysparm_display_value=true"
+_SYS_ID_PATTERN = re.compile(r"^[0-9a-f]{32}$", re.IGNORECASE)
+_TABLE_NAME_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
+_CI_IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
+
+
+def _is_valid_ci_table(table: str) -> bool:
+    """Accept ordinary and instance-specific ServiceNow table identifiers."""
+    return bool(_TABLE_NAME_PATTERN.fullmatch(table))
+
+
+def _is_sys_id(ci_identifier: str) -> bool:
+    return bool(_SYS_ID_PATTERN.fullmatch(ci_identifier))
+
+
+def _is_valid_ci_identifier(ci_identifier: object) -> bool:
+    """Accept a CI number or sys_id, never an encoded-query fragment."""
+    return isinstance(ci_identifier, str) and bool(
+        _CI_IDENTIFIER_PATTERN.fullmatch(ci_identifier)
+    )
+
+
+async def _probe_ci_table(
+    table: str,
+    ci_identifier: str,
+    lookup_field: str,
+    display_value: bool = True,
+) -> Optional[Dict[str, Any]]:
+    """Fetch one CI row by number or sys_id from a validated table."""
+    query_value = quote(ci_identifier, safe="")
+    url = (
+        f"{NWS_API_BASE}/api/now/table/{table}?"
+        f"sysparm_fields={','.join(DETAILED_CI_FIELDS)}&"
+        f"sysparm_query={lookup_field}={query_value}&"
+        f"sysparm_display_value={'true' if display_value else 'false'}"
+    )
     try:
-        data = await make_nws_request(url)
+        data = await make_nws_request(url, display_value=display_value)
     except Exception:
         return None
     if data and data.get('result'):
@@ -257,50 +292,94 @@ async def _probe_ci_table(table: str, ci_number: str) -> Optional[Dict[str, Any]
     return None
 
 
-async def get_ci_details(ci_number: str, ci_type: Optional[str] = None) -> dict[str, Any] | str:
+def _detail_result(
+    ci_table: str,
+    ci_identifier: str,
+    lookup_field: str,
+    row: Dict[str, Any],
+) -> dict[str, Any]:
+    """Shape detail results while retaining backward-compatible number output."""
+    result: dict[str, Any] = {
+        "ci_table": ci_table,
+        "ci_identifier": ci_identifier,
+        "result": row,
+    }
+    if lookup_field == "number":
+        result["ci_number"] = ci_identifier
+    return result
+
+
+async def get_ci_details(ci_identifier: str, ci_type: Optional[str] = None) -> dict[str, Any] | str:
     """
     Get comprehensive details for a specific Configuration Item.
 
     Args:
-        ci_number: CI number (e.g., CI0001000)
-        ci_type: Specific CI table to search in (optional, searches all if not provided)
+        ci_identifier: CI number or ServiceNow sys_id
+        ci_type: Specific CI table to search in (optional)
 
     Returns:
         Dictionary with detailed CI information or error string
 
-    When ci_type is not given, the candidate tables are probed concurrently
-    (bounded) instead of one-at-a-time; the most-specific-first priority is
-    preserved by returning the first table (in order) that yields a row.
+    A sys_id is the reliable follow-up identifier for custom CMDB classes that
+    have no number field. When no table is supplied, the base ``cmdb_ci`` row
+    is read first with raw values so its real ``sys_class_name`` table can be
+    resolved dynamically. The upstream common-table probes remain as a fallback
+    for instances where the base lookup does not return a row.
     """
-    if not ci_number:
+    if not ci_identifier:
         return "CI number is required"
 
-    # If CI type is specified, search in that table only
-    if ci_type and ci_type in CI_TABLES:
-        tables_to_search = [ci_type]
-    else:
-        # Search in common CI tables, ordered most-specific first
-        tables_to_search = [
-            "cmdb_ci_server", "cmdb_ci_computer", "cmdb_ci_database",
-            "cmdb_ci_hardware", "cmdb_ci_network_gear", "cmdb_ci_service", "cmdb_ci"
-        ]
+    if not _is_valid_ci_identifier(ci_identifier):
+        return "Invalid CI identifier"
 
+    if ci_type and not _is_valid_ci_table(ci_type):
+        return "Invalid CI table name"
+
+    lookup_field = "sys_id" if _is_sys_id(ci_identifier) else "number"
+
+    if ci_type:
+        row = await _probe_ci_table(ci_type, ci_identifier, lookup_field)
+        if row:
+            return _detail_result(ci_type, ci_identifier, lookup_field, row)
+        return CI_NOT_FOUND.format(ci_number=ci_identifier)
+
+    # ServiceNow returns raw ``sys_class_name`` only when display values are
+    # disabled. That technical table name lets this fork resolve a customer
+    # extension such as ``u_h104_custom_ci`` without a static allowlist.
+    base_row = await _probe_ci_table(
+        "cmdb_ci", ci_identifier, lookup_field, display_value=False
+    )
+    if base_row:
+        dynamic_table = base_row.get("sys_class_name")
+        if isinstance(dynamic_table, str) and _is_valid_ci_table(dynamic_table):
+            if dynamic_table != "cmdb_ci":
+                detail_row = await _probe_ci_table(
+                    dynamic_table, ci_identifier, lookup_field
+                )
+                if detail_row:
+                    return _detail_result(
+                        dynamic_table, ci_identifier, lookup_field, detail_row
+                    )
+            return _detail_result("cmdb_ci", ci_identifier, lookup_field, base_row)
+
+    # Fallback: preserve upstream common-class discovery for unusual instances
+    # where the base table does not surface the inherited record.
+    tables_to_search = [
+        "cmdb_ci_server", "cmdb_ci_computer", "cmdb_ci_database",
+        "cmdb_ci_hardware", "cmdb_ci_network_gear", "cmdb_ci_service", "cmdb_ci"
+    ]
     semaphore = asyncio.Semaphore(3)
 
     async def _bounded(table: str) -> Optional[Dict[str, Any]]:
         async with semaphore:
-            return await _probe_ci_table(table, ci_number)
+            return await _probe_ci_table(table, ci_identifier, lookup_field)
 
     rows = await asyncio.gather(*(_bounded(table) for table in tables_to_search))
     for table, row in zip(tables_to_search, rows):
         if row:
-            return {
-                "ci_table": table,
-                "ci_number": ci_number,
-                "result": row,
-            }
+            return _detail_result(table, ci_identifier, lookup_field, row)
 
-    return CI_NOT_FOUND.format(ci_number=ci_number)
+    return CI_NOT_FOUND.format(ci_number=ci_identifier)
 
 def _extract_ci_search_attributes(ci_data: Dict, ci_table: str) -> Dict[str, str]:
     """Extract search attributes from CI data. Complexity: 4"""

@@ -56,19 +56,10 @@ def run_setup():
 
     config['instance'] = input("ServiceNow instance URL (e.g., company.service-now.com): ").strip()
 
-    print("\nAuthentication type:")
-    print("  1. OAuth (recommended)")
-    print("  2. Basic auth")
-    auth_choice = input("Choose [1/2]: ").strip()
-
-    if auth_choice == '1':
-        config['auth_type'] = 'oauth'
-        config['client_id'] = input("OAuth Client ID: ").strip()
-        config['client_secret'] = getpass.getpass("OAuth Client Secret: ").strip()
-    else:
-        config['auth_type'] = 'basic'
-        config['username'] = input("Username: ").strip()
-        config['password'] = getpass.getpass("Password: ").strip()
+    print("\nAuthentication: Basic Auth (username/password)")
+    config['auth_type'] = 'basic'
+    config['username'] = input("Username: ").strip()
+    config['password'] = getpass.getpass("Password: ").strip()
 
     save_config(config)
     print(f"\nConfiguration saved to: {get_config_file_path()}")
@@ -83,20 +74,23 @@ def main():
         run_setup()
         sys.exit(0)
 
-    # Normal server startup - transport is controlled by MCP_TRANSPORT env var
-    # stdio (default): local use with Claude Code
-    # sse: cloud/Docker hosting for network-accessible agents (N8N, etc.)
+    # Basic credentials back a broad, write-capable tool set. This fork is
+    # intentionally local-only: stdio keeps the MCP endpoint inside the local
+    # client process boundary rather than exposing unauthenticated remote SSE.
     import os
     transport = os.environ.get("MCP_TRANSPORT", "stdio")
 
-    if transport == "sse":
-        print("Personal ServiceNow MCP Server started (SSE)", file=sys.stderr)
-        from tools import mcp
-        mcp.run(transport="sse")
-    else:
-        print("Personal ServiceNow MCP Server started (stdio).", file=sys.stderr)
-        from tools import mcp
-        mcp.run(transport="stdio")
+    if transport != "stdio":
+        print(
+            "This Basic Auth fork supports stdio only. Use the H104 CMDB MCP "
+            "for secured HTTP/SSE deployment.",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+
+    print("Personal ServiceNow MCP Server started (stdio).", file=sys.stderr)
+    from tools import mcp
+    mcp.run(transport="stdio")
 
 
 if __name__ == "__main__":

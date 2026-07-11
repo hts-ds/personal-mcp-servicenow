@@ -45,7 +45,7 @@ from Table_Tools.kb_article_tools import (
 from Table_Tools.cmdb_tools import (
     find_cis_by_type, search_cis_by_attributes, get_ci_details, similar_cis_for_ci, get_all_ci_types, quick_ci_search
 )
-from utility_tools import nowtest, now_test_oauth, now_auth_info
+from utility_tools import nowtest, now_test_connection, now_auth_info
 from Table_Tools.intelligent_query_tools import (
     intelligent_search, explain_servicenow_filters, build_smart_servicenow_filter,
     get_servicenow_filter_templates, get_query_examples, get_query_syntax_help
@@ -84,7 +84,7 @@ mcp.add_middleware(AuditMiddleware())
 # Register tools — consolidated from 55 -> 37 (v3.0) -> 32 (v4.0) -> 38 (v4.1 KB expansion)
 tools = [
     # Server & Authentication tools
-    nowtest, now_test_oauth, now_auth_info, nowtestauth, nowtest_auth_input,
+    nowtest, now_test_connection, now_auth_info, nowtestauth, nowtest_auth_input,
 
     # Generic table tools (replace 24 table-specific wrappers)
     search_records, get_record_summary, get_record, find_similar, filter_records,

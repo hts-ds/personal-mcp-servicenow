@@ -1,7 +1,7 @@
 """End-to-end integration tests that exercise real product code paths.
 
-These tests mock only the outermost network boundary (httpx via
-oauth_client / make_oauth_request) and let every wrapper, validator,
+These tests mock only the outermost network boundary (httpx via the Basic
+Auth client / make_authenticated_get) and let every wrapper, validator,
 filter applicator, query builder, and response shaper run as it would
 in production. They are the safety net for cross-module wiring that
 unit tests miss because each unit mocks its dependencies.
@@ -46,12 +46,12 @@ class TestModuleImports:
 
     def test_core_modules_import(self):
         import http_layer
-        import oauth
+        import auth
         import filter
         import config_loader
         import constants
         assert http_layer.make_nws_request is not None
-        assert oauth.ServiceNowOAuthClient is not None
+        assert auth.ServiceNowBasicAuthClient is not None
 
 
 class TestToolRegistry:
@@ -79,7 +79,7 @@ class TestToolRegistry:
             "similar_knowledge_for_text",
             "find_cis_by_type", "get_ci_details",
             "intelligent_search",
-            "now_test_oauth",
+            "now_test_connection",
             # v4.0 SLA consolidation
             "similar_slas_for_text", "get_sla_details",
             "query_slas_by_task", "query_slas_by_status", "query_slas_custom",
@@ -93,7 +93,7 @@ class TestToolRegistry:
 # ---------------------------------------------------------------------------
 
 class TestReadPipelineEndToEnd:
-    """search_records → query_table_by_text → make_nws_request → make_oauth_request."""
+    """search_records → query_table_by_text → make_nws_request → Basic Auth GET."""
 
     @pytest.mark.asyncio
     async def test_search_records_builds_encoded_query_and_perf_params(self):
@@ -101,11 +101,11 @@ class TestReadPipelineEndToEnd:
 
         captured = {}
 
-        async def fake_oauth_request(url):
+        async def fake_authenticated_get(url):
             captured["url"] = url
             return {"result": [{"number": "INC0001", "short_description": "server down"}]}
 
-        with patch("http_layer.request_dispatcher.make_oauth_request", new=fake_oauth_request):
+        with patch("http_layer.request_dispatcher.make_authenticated_get", new=fake_authenticated_get):
             result = await search_records("incident", "server down")
 
         assert result["result"][0]["number"] == "INC0001"
@@ -141,11 +141,11 @@ class TestReadPipelineEndToEnd:
 
         captured = {}
 
-        async def fake_oauth_request(url):
+        async def fake_authenticated_get(url):
             captured["url"] = url
             return {"result": []}
 
-        with patch("http_layer.request_dispatcher.make_oauth_request", new=fake_oauth_request):
+        with patch("http_layer.request_dispatcher.make_authenticated_get", new=fake_authenticated_get):
             await filter_records("sc_req_item", {"state": "1"})
 
         url = captured["url"]
@@ -162,11 +162,11 @@ class TestReadPipelineEndToEnd:
 
         captured = {}
 
-        async def fake_oauth_request(url):
+        async def fake_authenticated_get(url):
             captured["url"] = url
             return {"result": []}
 
-        with patch("http_layer.request_dispatcher.make_oauth_request", new=fake_oauth_request), \
+        with patch("http_layer.request_dispatcher.make_authenticated_get", new=fake_authenticated_get), \
              patch("Table_Tools.generic_table_tools.ENABLE_INCIDENT_CATEGORY_FILTERING", True):
             await filter_records("incident", {"priority": "1"})
 
@@ -179,13 +179,13 @@ class TestReadPipelineEndToEnd:
 # ---------------------------------------------------------------------------
 
 class TestWritePipelineEndToEnd:
-    """create_private_task → make_nws_request(method=POST) → oauth_client (raise_for_status=True)."""
+    """create_private_task → make_nws_request(method=POST) → Basic Auth client."""
 
     @pytest.mark.asyncio
     async def test_create_private_task_routes_through_unified_pipeline(self):
         from Table_Tools.vtb_task_tools import create_private_task
 
-        with patch("http_layer.request_dispatcher.get_oauth_client") as mock_get_client:
+        with patch("http_layer.request_dispatcher.get_servicenow_client") as mock_get_client:
             mock_client = MagicMock()
             mock_client.make_authenticated_request = AsyncMock(
                 return_value={"result": {"number": "VTB0001234"}}
@@ -195,7 +195,7 @@ class TestWritePipelineEndToEnd:
             result = await create_private_task({"short_description": "Integration test"})
 
         assert result == {"number": "VTB0001234"}
-        # Confirm the write was delegated to oauth_client with raise_for_status=True
+        # Confirm the write was delegated to the Basic Auth client with raise_for_status=True
         call = mock_client.make_authenticated_request.call_args
         assert call.args[0] == "POST"
         assert call.kwargs["raise_for_status"] is True
@@ -206,12 +206,12 @@ class TestWritePipelineEndToEnd:
         from Table_Tools.vtb_task_tools import update_private_task
 
         # Sequence: GET (sys_id lookup) -> PATCH (update)
-        async def fake_oauth_get(url):
+        async def fake_authenticated_get(url):
             assert "sysparm_query=number=VTB0001234" in url
             return {"result": [{"sys_id": "abc123"}]}
 
-        with patch("http_layer.request_dispatcher.make_oauth_request", new=fake_oauth_get), \
-             patch("http_layer.request_dispatcher.get_oauth_client") as mock_get_client:
+        with patch("http_layer.request_dispatcher.make_authenticated_get", new=fake_authenticated_get), \
+             patch("http_layer.request_dispatcher.get_servicenow_client") as mock_get_client:
 
             mock_client = MagicMock()
             mock_client.make_authenticated_request = AsyncMock(
@@ -232,7 +232,7 @@ class TestWritePipelineEndToEnd:
 # ---------------------------------------------------------------------------
 
 class TestErrorPropagationEndToEnd:
-    """HTTPStatusError raised at the OAuth boundary surfaces as a domain error string."""
+    """HTTPStatusError raised at the Basic Auth boundary surfaces as a domain error string."""
 
     @pytest.mark.parametrize("status_code,fragment", [
         (401, "Authentication failed"),
@@ -251,7 +251,7 @@ class TestErrorPropagationEndToEnd:
         response.status_code = status_code
         error = httpx.HTTPStatusError(str(status_code), request=MagicMock(), response=response)
 
-        with patch("http_layer.request_dispatcher.get_oauth_client") as mock_get_client:
+        with patch("http_layer.request_dispatcher.get_servicenow_client") as mock_get_client:
             mock_client = MagicMock()
             mock_client.make_authenticated_request = AsyncMock(side_effect=error)
             mock_get_client.return_value = mock_client

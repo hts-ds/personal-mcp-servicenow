@@ -1,5 +1,10 @@
 # Changelog
 
+> **Upstream history notice:** entries below describe the source project and
+> may refer to OAuth modules that this H104 Basic Auth fork has removed. See
+> [docs/H104_BASIC_AUTH_MIGRATION.md](docs/H104_BASIC_AUTH_MIGRATION.md) for
+> the active authentication architecture.
+
 All notable changes to the Personal MCP ServiceNow project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),

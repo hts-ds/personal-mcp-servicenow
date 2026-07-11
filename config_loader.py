@@ -6,18 +6,17 @@ Supports loading credentials from:
 2. Config file (~/.config/mcp-servicenow/config.json on Unix, %APPDATA% on Windows)
 
 Environment variables:
-- SERVICENOW_INSTANCE: ServiceNow instance URL
-- SERVICENOW_AUTH_TYPE: 'oauth' or 'basic'
-- SERVICENOW_CLIENT_ID: OAuth client ID
-- SERVICENOW_CLIENT_SECRET: OAuth client secret
-- SERVICENOW_USERNAME: Basic auth username
-- SERVICENOW_PASSWORD: Basic auth password
+- SERVICENOW_INSTANCE or SERVICE_NOW_HOST: ServiceNow instance URL
+- SERVICENOW_USERNAME or SERVICE_NOW_USERNAME: Basic auth username
+- SERVICENOW_PASSWORD or SERVICE_NOW_PASSWORD: Basic auth password
+- SERVICENOW_ENV_FILE: optional path to an existing local credential file
 """
 import os
 import json
 import platform
-from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any
+
+from auth.environment import load_servicenow_environment
 
 
 class ConfigError(Exception):
@@ -44,21 +43,20 @@ def get_config_file_path() -> str:
 
 def load_config_from_env() -> Dict[str, Any]:
     """Load configuration from environment variables."""
-    config = {}
-
+    load_servicenow_environment()
+    config = {'auth_type': os.environ.get('SERVICENOW_AUTH_TYPE', 'basic').lower()}
     env_mapping = {
-        'SERVICENOW_INSTANCE': 'instance',
-        'SERVICENOW_AUTH_TYPE': 'auth_type',
-        'SERVICENOW_CLIENT_ID': 'client_id',
-        'SERVICENOW_CLIENT_SECRET': 'client_secret',
-        'SERVICENOW_USERNAME': 'username',
-        'SERVICENOW_PASSWORD': 'password',
+        'instance': ('SERVICENOW_INSTANCE', 'SERVICE_NOW_HOST'),
+        'username': ('SERVICENOW_USERNAME', 'SERVICE_NOW_USERNAME'),
+        'password': ('SERVICENOW_PASSWORD', 'SERVICE_NOW_PASSWORD'),
     }
 
-    for env_var, config_key in env_mapping.items():
-        value = os.environ.get(env_var)
-        if value:
-            config[config_key] = value
+    for config_key, names in env_mapping.items():
+        for env_var in names:
+            value = os.environ.get(env_var)
+            if value:
+                config[config_key] = value
+                break
 
     return config
 
@@ -107,31 +105,31 @@ def validate_config(config: Dict[str, Any]) -> None:
             "Missing 'instance'. Set SERVICENOW_INSTANCE env var or add to config file."
         )
 
-    auth_type = config.get('auth_type', 'basic')
+    auth_type = config.get('auth_type', 'basic').lower()
+    if auth_type != 'basic':
+        raise ConfigError(
+            "Only Basic Auth is supported by this fork. Remove SERVICENOW_AUTH_TYPE "
+            "or set it to 'basic'."
+        )
 
-    if auth_type == 'oauth':
-        if not config.get('client_id'):
-            raise ConfigError(
-                "OAuth requires 'client_id'. Set SERVICENOW_CLIENT_ID env var or add to config file."
-            )
-        if not config.get('client_secret'):
-            raise ConfigError(
-                "OAuth requires 'client_secret'. Set SERVICENOW_CLIENT_SECRET env var or add to config file."
-            )
-    else:
-        # basic auth
-        if not config.get('username'):
-            raise ConfigError(
-                "Basic auth requires 'username'. Set SERVICENOW_USERNAME env var or add to config file."
-            )
-        if not config.get('password'):
-            raise ConfigError(
-                "Basic auth requires 'password'. Set SERVICENOW_PASSWORD env var or add to config file."
-            )
+    if not config.get('username'):
+        raise ConfigError(
+            "Basic auth requires 'username'. Set SERVICENOW_USERNAME or "
+            "SERVICE_NOW_USERNAME."
+        )
+    if not config.get('password'):
+        raise ConfigError(
+            "Basic auth requires 'password'. Set SERVICENOW_PASSWORD or "
+            "SERVICE_NOW_PASSWORD."
+        )
 
 
 def save_config(config: Dict[str, Any]) -> None:
     """Save configuration to config file."""
+    config = dict(config)
+    config['auth_type'] = 'basic'
+    config.pop('client_id', None)
+    config.pop('client_secret', None)
     config_dir = get_config_dir()
     os.makedirs(config_dir, exist_ok=True)
 
@@ -154,16 +152,17 @@ MCP ServiceNow Configuration Required
 Option 1: Environment Variables
 -------------------------------
 Set these environment variables:
-  SERVICENOW_INSTANCE=your-instance.service-now.com
-  SERVICENOW_AUTH_TYPE=oauth  (or 'basic')
+  SERVICENOW_INSTANCE=https://your-instance.service-now.com
+  SERVICENOW_USERNAME=your-username
+  SERVICENOW_PASSWORD=your-password
 
-  For OAuth:
-    SERVICENOW_CLIENT_ID=your-client-id
-    SERVICENOW_CLIENT_SECRET=your-client-secret
+Existing H104 variable names are also accepted:
+  SERVICE_NOW_HOST=https://your-instance.service-now.com
+  SERVICE_NOW_USERNAME=your-username
+  SERVICE_NOW_PASSWORD=your-password
 
-  For Basic Auth:
-    SERVICENOW_USERNAME=your-username
-    SERVICENOW_PASSWORD=your-password
+To reuse a protected credential file without copying its values:
+  SERVICENOW_ENV_FILE=C:\\path\\to\\servicenow.env
 
 Option 2: Config File
 ---------------------
@@ -171,9 +170,9 @@ Create {config_path} with:
 
 {{
   "instance": "your-instance.service-now.com",
-  "auth_type": "oauth",
-  "client_id": "your-client-id",
-  "client_secret": "your-client-secret"
+  "auth_type": "basic",
+  "username": "your-username",
+  "password": "your-password"
 }}
 
 Option 3: Interactive Setup

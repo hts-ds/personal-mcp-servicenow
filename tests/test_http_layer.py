@@ -105,11 +105,11 @@ class TestMakeNwsRequestReadPath:
     async def test_get_path_applies_perf_params_and_flattens(self):
         captured_urls = []
 
-        async def fake_oauth(url):
+        async def fake_authenticated_get(url):
             captured_urls.append(url)
             return {"result": [{"number": {"display_value": "INC0001", "value": "INC0001"}}]}
 
-        with patch("http_layer.request_dispatcher.make_oauth_request", new=fake_oauth):
+        with patch("http_layer.request_dispatcher.make_authenticated_get", new=fake_authenticated_get):
             result = await make_nws_request(
                 "https://x/api/now/table/incident?sysparm_query=active=true"
             )
@@ -147,7 +147,7 @@ class TestMakeNwsRequestWritePath:
         mock_client.make_authenticated_request = fake_authenticated
 
         original_url = "https://x/api/now/table/vtb_task"
-        with patch("http_layer.request_dispatcher.get_oauth_client", return_value=mock_client):
+        with patch("http_layer.request_dispatcher.get_servicenow_client", return_value=mock_client):
             await make_nws_request(
                 original_url,
                 method="POST",
@@ -166,7 +166,7 @@ class TestMakeNwsRequestWritePath:
         """Write responses have a single-record shape; flattening would corrupt them.
 
         After Sprint 3, the dispatcher routes write returns through the
-        oauth client without passing the result through
+        Basic Auth client without passing the result through
         ``extract_display_values``. Verify the returned dict is exactly
         what the client returned.
         """
@@ -183,7 +183,7 @@ class TestMakeNwsRequestWritePath:
         mock_client = MagicMock()
         mock_client.make_authenticated_request = AsyncMock(return_value=write_response)
 
-        with patch("http_layer.request_dispatcher.get_oauth_client", return_value=mock_client):
+        with patch("http_layer.request_dispatcher.get_servicenow_client", return_value=mock_client):
             result = await make_nws_request(
                 "https://x/api/now/table/vtb_task/sys123",
                 method="PATCH",
@@ -209,7 +209,7 @@ class TestMakeNwsRequestWritePath:
         mock_client = MagicMock()
         mock_client.make_authenticated_request = fake_authenticated
 
-        with patch("http_layer.request_dispatcher.get_oauth_client", return_value=mock_client):
+        with patch("http_layer.request_dispatcher.get_servicenow_client", return_value=mock_client):
             await make_nws_request(
                 "https://x/api/now/table/vtb_task",
                 method="POST",

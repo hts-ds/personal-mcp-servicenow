@@ -1,4 +1,8 @@
-# Migration Guide: v3.x → v4.0
+# Archived upstream migration guide: v3.x → v4.0
+
+> **Not current for this H104 Basic Auth fork.** OAuth module names and patch
+> targets below describe upstream history only. The active runtime uses
+> `auth/ServiceNowBasicAuthClient`; follow [BASIC_AUTH_SETUP_GUIDE.md](BASIC_AUTH_SETUP_GUIDE.md).
 
 v4.0 is a major release with breaking changes. Most of the churn is internal to the codebase — backwards-compat shims preserve the v3 Python import paths and test-patch targets. The breaking changes for MCP clients are limited to the SLA tool surface.
 
