@@ -126,3 +126,33 @@ async def test_attribute_search_targets_a_valid_custom_ci_table(monkeypatch):
     await cmdb_tools.search_cis_by_attributes(name="H104", ci_type="u_h104_custom_ci")
 
     assert "/api/now/table/u_h104_custom_ci?" in captured_urls[0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "search_value",
+    [
+        "H104^ORsys_idISNOTEMPTY",
+        "H104&sysparm_limit=10000",
+        "H104%26sysparm_limit%3D10000",
+    ],
+)
+async def test_public_cmdb_searches_reject_query_shaping_values(monkeypatch, search_value):
+    """User-provided search text cannot become a ServiceNow query clause or URL parameter."""
+    import Table_Tools.cmdb_tools as cmdb_tools
+
+    called = False
+
+    async def fake_request(*_: object, **__: object):
+        nonlocal called
+        called = True
+        return {"result": []}
+
+    monkeypatch.setattr(cmdb_tools, "make_nws_request", fake_request)
+
+    attribute_result = await cmdb_tools.search_cis_by_attributes(name=search_value)
+    quick_result = await cmdb_tools.quick_ci_search(search_value)
+
+    assert attribute_result == "Invalid CI search value"
+    assert quick_result == "Invalid CI search value"
+    assert called is False

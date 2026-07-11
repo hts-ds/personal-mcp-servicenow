@@ -9,6 +9,7 @@ import asyncio
 import re
 from urllib.parse import quote
 from http_layer import make_nws_request, NWS_API_BASE
+from http_layer.url_builder import encode_query_value
 from utils import extract_keywords
 from typing import Any, Dict, Optional, List
 from constants import (
@@ -163,6 +164,8 @@ async def find_cis_by_type(ci_type: str, detailed: bool = False) -> dict[str, An
     """
     if not ci_type:
         return "CI type is required"
+    if not _is_valid_ci_table(ci_type):
+        return "Invalid CI table name"
 
     fields = DETAILED_CI_FIELDS if detailed else ESSENTIAL_CI_FIELDS
     
@@ -216,14 +219,17 @@ async def search_cis_by_attributes(
     # the sysparm_query. (Operator chars in the locked encode safe-set —
     # & ^ = etc. — still pass through and remain unsupported inside values.)
     query_parts = []
-    if name:
-        query_parts.append(f"nameLIKE{quote(name, safe='')}")
-    if ip_address:
-        query_parts.append(f"ip_address={quote(ip_address, safe='')}")
-    if location:
-        query_parts.append(f"locationLIKE{quote(location, safe='')}")
-    if status:
-        query_parts.append(f"operational_status={quote(status, safe='')}")
+    try:
+        if name:
+            query_parts.append(f"nameLIKE{encode_query_value(name)}")
+        if ip_address:
+            query_parts.append(f"ip_address={encode_query_value(ip_address)}")
+        if location:
+            query_parts.append(f"locationLIKE{encode_query_value(location)}")
+        if status:
+            query_parts.append(f"operational_status={encode_query_value(status)}")
+    except ValueError:
+        return "Invalid CI search value"
     
     query_string = "^".join(query_parts)
     
@@ -501,7 +507,7 @@ async def quick_ci_search(search_term: str) -> dict[str, Any] | str:
     try:
         # Try multiple search approaches. Percent-encode the term so special
         # characters in it don't corrupt the sysparm_query structure.
-        safe_term = quote(search_term, safe='')
+        safe_term = encode_query_value(search_term)
         query_parts = [
             f"nameLIKE{safe_term}",
             f"ip_address={safe_term}",
@@ -521,5 +527,7 @@ async def quick_ci_search(search_term: str) -> dict[str, Any] | str:
         
         return NO_CIS_FOUND_FOR_SEARCH.format(search_term=search_term)
 
+    except ValueError:
+        return "Invalid CI search value"
     except Exception:
         return ERROR_QUICK_CI_SEARCH

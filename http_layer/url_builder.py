@@ -17,11 +17,30 @@ from __future__ import annotations
 from urllib.parse import quote, unquote
 
 
+_UNSAFE_QUERY_VALUE_CHARS = frozenset({"^", "&", "=", "%", "?", "#"})
+
+
+def encode_query_value(value: str) -> str:
+    """Encode a public search value after rejecting query-shaping syntax.
+
+    ServiceNow decodes URL parameters before parsing its encoded-query syntax.
+    Treating user text as a pre-encoded fragment therefore lets ``^OR`` and
+    ``&sysparm_*`` change a query even when the first URL encoding looks safe.
+    Public MCP search values are literal text, so reject encoded-query and URL
+    delimiters before constructing the query condition.
+    """
+    if not isinstance(value, str) or any(char in value for char in _UNSAFE_QUERY_VALUE_CHARS):
+        raise ValueError("Invalid ServiceNow query value")
+    return quote(value, safe="")
+
+
 def ensure_query_encoded(url: str) -> str:
     """Ensure ``sysparm_query`` value in URL is percent-encoded for ServiceNow.
 
     Idempotent: already-encoded URLs are unquoted first to prevent
-    double-encoding. Preserves ServiceNow operators: ``= < > & ^ ( ) : @ !``.
+    double-encoding. Preserves ServiceNow query operators: ``= < > ^ ( ) : @ !``.
+    ``&`` is deliberately excluded because it is a URL parameter delimiter,
+    not a ServiceNow encoded-query operator.
     """
     if "sysparm_query=" not in url:
         return url
@@ -33,7 +52,7 @@ def ensure_query_encoded(url: str) -> str:
         query_value = rest
         suffix = ""
     decoded_value = unquote(query_value)
-    encoded_value = quote(decoded_value, safe="=<>&^():@!")
+    encoded_value = quote(decoded_value, safe="=<>^():@!")
     return f"{prefix}sysparm_query={encoded_value}{suffix}"
 
 
